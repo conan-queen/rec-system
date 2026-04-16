@@ -1,0 +1,82 @@
+version: "3.9"
+
+# 一键启动三个服务：推荐系统 API + MySQL + Redis
+#
+# 使用方式：
+#   docker-compose up -d          # 后台启动所有服务
+#   docker-compose logs -f app    # 查看 API 日志
+#   docker-compose down           # 停止并删除容器
+#   docker-compose down -v        # 停止并删除容器 + 数据卷
+
+services:
+
+  # ── 推荐系统 API ──────────────────────────────────────────
+  app:
+    build: .
+    container_name: rec-api
+    ports:
+      - "8000:8000"
+    environment:
+      # MySQL 连接配置（与下方 mysql 服务对应）
+      MYSQL_HOST:     mysql
+      MYSQL_PORT:     3306
+      MYSQL_USER:     rec_user
+      MYSQL_PASSWORD: rec_password
+      MYSQL_DATABASE: rec_system
+      # Redis 连接配置
+      REDIS_HOST:     redis
+      REDIS_PORT:     6379
+      USE_MYSQL:      "true"
+    depends_on:
+      mysql:
+        condition: service_healthy   # 等 MySQL 健康后再启动
+      redis:
+        condition: service_healthy
+    restart: unless-stopped          # 崩溃自动重启
+
+  # ── MySQL 数据库 ──────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: rec-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE:      rec_system
+      MYSQL_USER:          rec_user
+      MYSQL_PASSWORD:      rec_password
+    ports:
+      - "3306:3306"                  # 本地也可以连接 MySQL
+    volumes:
+      - mysql_data:/var/lib/mysql    # 数据持久化，容器删除数据不丢失
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql  # 自动建表
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "rec_user", "-prec_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Redis 缓存 ────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine            # alpine 版本更小
+    container_name: rec-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data             # 数据持久化
+    command: >
+      redis-server
+      --maxmemory 256mb              
+      --maxmemory-policy allkeys-lru 
+      --save 60 1
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+# ── 数据卷（持久化存储）──────────────────────────────────────
+volumes:
+  mysql_data:
+  redis_data:
