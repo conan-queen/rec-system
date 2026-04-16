@@ -246,6 +246,28 @@ nav{background:var(--white);border-bottom:1px solid var(--border);position:stick
     </div>
 
     <div class="arch-card" style="margin-top:1rem">
+      <div class="arch-card-title">Feature Store 状态</div>
+      <div id="fsStats"><div style="color:var(--muted);font-size:.85rem">加载中...</div></div>
+      <div style="margin-top:1rem;display:flex;gap:.75rem;flex-wrap:wrap">
+        <div style="flex:1">
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:.5rem">查询用户特征</div>
+          <div style="display:flex;gap:.5rem">
+            <input type="number" id="fsUserId" value="1" style="width:80px;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:.85rem;outline:none">
+            <button class="btn-outline" onclick="queryUserFeatures()">查询</button>
+          </div>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:.5rem">查询电影特征</div>
+          <div style="display:flex;gap:.5rem">
+            <input type="number" id="fsMovieId" value="1" style="width:80px;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:.85rem;outline:none">
+            <button class="btn-outline" onclick="queryItemFeatures()">查询</button>
+          </div>
+        </div>
+      </div>
+      <div id="fsQueryResult" style="margin-top:1rem"></div>
+    </div>
+
+    <div class="arch-card" style="margin-top:1rem">
       <div class="arch-card-title">A/B 实验结果</div>
       <div id="abStats"><div style="color:var(--muted);font-size:.85rem">加载中...</div></div>
       <button class="btn-outline" style="margin-top:1rem" onclick="loadABStats()">刷新实验数据</button>
@@ -264,7 +286,7 @@ function showPage(name,btn){
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
   if(btn)btn.classList.add('active');
-  if(name==='admin'){refreshAdmin();loadABStats();}
+  if(name==='admin'){refreshAdmin();loadABStats();loadFSStats();}
 }
 
 function goBack(){
@@ -499,6 +521,65 @@ async function logABClick(movieId) {
       })
     });
   } catch(e) {}
+}
+
+async function loadFSStats() {
+  const container = document.getElementById('fsStats');
+  if (!container) return;
+  try {
+    const d = await fetch(API+'/features/stats').then(r=>r.json());
+    if (!d.available) { container.innerHTML = '<div style="color:var(--muted);font-size:.85rem">Redis 不可用</div>'; return; }
+    container.innerHTML = `<div style="display:flex;gap:1.5rem;font-size:.85rem;flex-wrap:wrap">
+      <div><span style="color:var(--muted)">缓存用户数</span> <b style="color:var(--accent)">${d.cached_users}</b></div>
+      <div><span style="color:var(--muted)">缓存电影数</span> <b style="color:var(--accent)">${d.cached_items}</b></div>
+      <div><span style="color:var(--muted)">用户特征 TTL</span> <b>${d.user_ttl_hours}h</b></div>
+      <div><span style="color:var(--muted)">电影特征 TTL</span> <b>${d.item_ttl_hours}h</b></div>
+    </div>`;
+  } catch(e) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:.85rem">加载失败</div>';
+  }
+}
+
+async function queryUserFeatures() {
+  const userId = document.getElementById('fsUserId').value;
+  const result = document.getElementById('fsQueryResult');
+  result.innerHTML = '<div style="color:var(--muted);font-size:.85rem">查询中...</div>';
+  try {
+    const d = await fetch(`${API}/features/user/${userId}`).then(r=>r.json());
+    result.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem;font-size:.82rem">
+      <div style="font-weight:600;margin-bottom:.75rem">用户 ${userId} 特征</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <div><span style="color:var(--muted)">评分数:</span> <b>${d.rating_count}</b></div>
+        <div><span style="color:var(--muted)">平均评分:</span> <b>${d.avg_rating}</b></div>
+        <div><span style="color:var(--muted)">评分标准差:</span> <b>${d.rating_std}</b></div>
+        <div><span style="color:var(--muted)">用户分层:</span> <b style="color:var(--accent)">${d.user_tier}</b></div>
+      </div>
+      <div style="margin-top:.5rem"><span style="color:var(--muted)">偏好类型:</span> <b>${(d.favorite_genres||[]).join(' · ')||'暂无'}</b></div>
+    </div>`;
+  } catch(e) {
+    result.innerHTML = '<div style="color:var(--accent);font-size:.82rem">查询失败</div>';
+  }
+}
+
+async function queryItemFeatures() {
+  const movieId = document.getElementById('fsMovieId').value;
+  const result = document.getElementById('fsQueryResult');
+  result.innerHTML = '<div style="color:var(--muted);font-size:.85rem">查询中...</div>';
+  try {
+    const d = await fetch(`${API}/features/item/${movieId}`).then(r=>r.json());
+    result.innerHTML = `<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem;font-size:.82rem">
+      <div style="font-weight:600;margin-bottom:.75rem">${d.title}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+        <div><span style="color:var(--muted)">评分数:</span> <b>${d.rating_count}</b></div>
+        <div><span style="color:var(--muted)">平均评分:</span> <b>${d.avg_rating}</b></div>
+        <div><span style="color:var(--muted)">贝叶斯热度分:</span> <b style="color:var(--accent)">${d.popularity_score}</b></div>
+        <div><span style="color:var(--muted)">年份:</span> <b>${d.year||'—'}</b></div>
+      </div>
+      <div style="margin-top:.5rem"><span style="color:var(--muted)">类型:</span> <b>${(d.genres||[]).join(' · ')}</b></div>
+    </div>`;
+  } catch(e) {
+    result.innerHTML = '<div style="color:var(--accent);font-size:.82rem">查询失败</div>';
+  }
 }
 
 async function loadABStats() {

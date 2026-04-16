@@ -24,8 +24,10 @@ from models.content_based import ContentBasedRecommender
 from models.hybrid import HybridRecommender
 from cache.redis_cache import get_cache
 from ab_test.ab_manager import ABManager
+from feature_store.feature_store import FeatureStore
 
 _ab = ABManager()
+_fs = FeatureStore()
 
 app = FastAPI(title="CineAI", version="3.0.0")
 
@@ -517,6 +519,37 @@ async def clear_all_cache():
     return {"message": f"已清除 {count} 个缓存 key"}
 
 
+
+
+# ── Feature Store 接口 ───────────────────────────
+
+@app.get("/features/user/{user_id}")
+async def get_user_features(user_id: int):
+    """
+    获取用户特征向量
+
+    返回：评分统计、偏好类型、用户分层
+    面试：展示 Feature Store 统一管理特征的能力
+    """
+    features = _fs.get_user_features(user_id)
+    if not features:
+        raise HTTPException(status_code=404, detail=f"用户 {user_id} 无特征数据")
+    return features
+
+
+@app.get("/features/item/{movie_id}")
+async def get_item_features(movie_id: int):
+    """获取电影特征向量（含贝叶斯热度分）"""
+    features = _fs.get_item_features(movie_id)
+    if not features:
+        raise HTTPException(status_code=404, detail=f"电影 {movie_id} 无特征数据")
+    return features
+
+
+@app.get("/features/stats")
+async def get_feature_store_stats():
+    """Feature Store 缓存统计"""
+    return _fs.get_stats()
 
 
 # ── A/B 测试接口 ──────────────────────────────
