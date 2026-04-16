@@ -23,6 +23,9 @@ from models.collaborative import SVDRecommender
 from models.content_based import ContentBasedRecommender
 from models.hybrid import HybridRecommender
 from cache.redis_cache import get_cache
+from ab_test.ab_manager import ABManager
+
+_ab = ABManager()
 
 app = FastAPI(title="CineAI", version="3.0.0")
 
@@ -513,6 +516,48 @@ async def clear_all_cache():
     count = get_cache().invalidate_all()
     return {"message": f"已清除 {count} 个缓存 key"}
 
+
+
+
+# ── A/B 测试接口 ──────────────────────────────
+
+class ABClickRequest(BaseModel):
+    user_id: int
+    experiment_id: int
+    variant: str
+    movie_id: int
+
+
+@app.get("/ab/variant/{user_id}")
+async def get_ab_variant(user_id: int, experiment_id: int = 1):
+    """
+    获取用户的实验分组
+
+    前端在请求推荐前先调用此接口，拿到分组后：
+    1. 用对应的 mode 请求推荐
+    2. 记录曝光事件
+    """
+    variant = _ab.get_variant(user_id, experiment_id)
+    _ab.log_impression(user_id, experiment_id, variant)
+    return {"variant": variant, "experiment_id": experiment_id}
+
+
+@app.post("/ab/click")
+async def log_ab_click(req: ABClickRequest):
+    """记录用户点击事件"""
+    _ab.log_click(req.user_id, req.experiment_id, req.variant, req.movie_id)
+    return {"success": True}
+
+
+@app.get("/ab/stats")
+async def get_ab_stats(experiment_id: int = 1):
+    """
+    获取 A/B 实验统计结果
+
+    返回各组 CTR 和统计显著性
+    面试展示点：用数据驱动的方式验证推荐策略效果
+    """
+    return _ab.get_stats(experiment_id)
 
 if __name__ == "__main__":
     import uvicorn

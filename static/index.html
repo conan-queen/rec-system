@@ -244,6 +244,12 @@ nav{background:var(--white);border-bottom:1px solid var(--border);position:stick
         <tr><td>Coverage</td><td class="val">75%</td><td>目录覆盖率</td></tr>
       </table>
     </div>
+
+    <div class="arch-card" style="margin-top:1rem">
+      <div class="arch-card-title">A/B 实验结果</div>
+      <div id="abStats"><div style="color:var(--muted);font-size:.85rem">加载中...</div></div>
+      <button class="btn-outline" style="margin-top:1rem" onclick="loadABStats()">刷新实验数据</button>
+    </div>
   </div>
 </div>
 
@@ -258,7 +264,7 @@ function showPage(name,btn){
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
   if(btn)btn.classList.add('active');
-  if(name==='admin')refreshAdmin();
+  if(name==='admin'){refreshAdmin();loadABStats();}
 }
 
 function goBack(){
@@ -304,9 +310,12 @@ async function checkHealth(){
 async function fetchRecommendations(){
   const userId=document.getElementById('userId').value;
   const topK=document.getElementById('topK').value;
-  const mode=document.getElementById('mode').value;
   const btn=document.getElementById('recBtn');
   btn.disabled=true;btn.textContent='加载中...';
+  // A/B 测试：自动获取该用户的实验分组
+  const abVariant = await getABVariant(parseInt(userId));
+  const mode = abVariant;
+  document.getElementById('mode').value = abVariant;
   document.getElementById('recContainer').innerHTML='<div class="loading"><div class="spinner"></div>计算推荐中...</div>';
   document.getElementById('recHeader').style.display='none';
   try{
@@ -357,6 +366,8 @@ async function doSearch(){
 }
 
 async function showDetail(movieId){
+  // 记录 A/B 点击事件
+  logABClick(movieId);
   prevPage=document.querySelector('.page.active')?.id?.replace('page-','')||'home';
   showPage('detail',null);
   const content=document.getElementById('detailContent');
@@ -458,6 +469,71 @@ async function clearCache(){
 
 checkHealth();
 setInterval(checkHealth,30000);
+
+// ── A/B 测试 ──────────────────────────────
+let currentVariant = 'hybrid';
+let currentExperimentId = 1;
+
+async function getABVariant(userId) {
+  try {
+    const d = await fetch(`${API}/ab/variant/${userId}?experiment_id=1`).then(r=>r.json());
+    currentVariant = d.variant;
+    currentExperimentId = d.experiment_id;
+    return d.variant;
+  } catch(e) {
+    return 'hybrid';
+  }
+}
+
+async function logABClick(movieId) {
+  const userId = parseInt(document.getElementById('userId')?.value || 1);
+  try {
+    await fetch(API+'/ab/click', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        user_id: userId,
+        experiment_id: currentExperimentId,
+        variant: currentVariant,
+        movie_id: movieId
+      })
+    });
+  } catch(e) {}
+}
+
+async function loadABStats() {
+  const container = document.getElementById('abStats');
+  if (!container) return;
+  try {
+    const d = await fetch(API+'/ab/stats?experiment_id=1').then(r=>r.json());
+    if (d.error) { container.innerHTML = `<div style="color:var(--accent);font-size:.85rem">${d.error}</div>`; return; }
+
+    const rows = Object.entries(d.stats).map(([variant, s]) => {
+      const sig = s.significant === true ? '<span style="color:var(--green);font-size:.72rem;font-weight:700">✓ 显著</span>'
+                : s.significant === false ? '<span style="color:var(--muted);font-size:.72rem">不显著</span>' : '';
+      const pval = s.p_value !== null && s.p_value !== undefined ? s.p_value : '—';
+      return `<tr>
+        <td style="font-weight:600">${variant}</td>
+        <td>${s.impressions}</td>
+        <td>${s.clicks}</td>
+        <td style="font-weight:700;color:var(--accent)">${s.ctr}%</td>
+        <td>${pval}</td>
+        <td>${sig}</td>
+      </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+      <div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">${d.description}</div>
+      <table class="metrics-table">
+        <tr><th>实验组</th><th>曝光</th><th>点击</th><th>CTR</th><th>p-value</th><th>显著性</th></tr>
+        ${rows}
+      </table>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:.75rem">总事件数: ${d.total_events} · p &lt; 0.05 表示差异统计显著</div>
+    `;
+  } catch(e) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:.85rem">暂无数据</div>';
+  }
+}
 </script>
 </body>
 </html>
