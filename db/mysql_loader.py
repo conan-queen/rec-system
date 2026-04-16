@@ -12,10 +12,12 @@ class MySQLLoader:
 
     def __init__(self, config: dict = None):
         if config is None:
+            host = os.getenv("MYSQL_HOST", "localhost")
+            print(f"[DEBUG] MySQLLoader init, MYSQL_HOST={host}")
             config = {
-                "host":     os.getenv("MYSQL_HOST",     "localhost"),
-                "port":     int(os.getenv("MYSQL_PORT", "3306")),
-                "user":     os.getenv("MYSQL_USER",     "root"),
+                "host": host,
+                "port": int(os.getenv("MYSQL_PORT", "3306")),
+                "user": os.getenv("MYSQL_USER", "root"),
                 "password": os.getenv("MYSQL_PASSWORD", "yourpassword"),
                 "database": os.getenv("MYSQL_DATABASE", "rec_system"),
             }
@@ -119,4 +121,3 @@ def test_connection(config: dict = None) -> bool:
     except Exception as e:
         print(f"[MySQL] 连接失败: {e}")
         return False
-    

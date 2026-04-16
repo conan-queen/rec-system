@@ -26,6 +26,7 @@ def train_and_evaluate():
     print("=" * 55)
 
     # ── 1. 数据准备 ────────────────────────────────────────────────
+    print(f"[DEBUG] ALL ENV: MYSQL_HOST={os.getenv('MYSQL_HOST')}, USE_MYSQL={os.getenv('USE_MYSQL')}")
     print("\n【Step 1】加载数据...")
     USE_MYSQL = os.getenv("USE_MYSQL", "true").lower() == "true"
 
