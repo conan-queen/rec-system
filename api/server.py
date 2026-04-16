@@ -360,8 +360,7 @@ async def search_movies(q: str = Query(..., min_length=1)):
 
 
 @app.get("/movies/top")
-async def top_movies(limit: int = Query(default=20, le=50)):
-    """热门排行榜"""
+async def top_movies(limit: int = Query(default=20, le=200)):  # ← le 改成 200
     try:
         conn = get_db()
         with conn.cursor() as cursor:
@@ -373,7 +372,7 @@ async def top_movies(limit: int = Query(default=20, le=50)):
                 FROM movies m
                 JOIN ratings r ON m.movie_id = r.movie_id
                 GROUP BY m.movie_id
-                HAVING rating_count >= 5
+                HAVING rating_count >= 3
                 ORDER BY avg_rating DESC, rating_count DESC
                 LIMIT %s
             """, (limit,))
@@ -595,4 +594,3 @@ async def get_ab_stats(experiment_id: int = 1):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-    
