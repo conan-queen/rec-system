@@ -27,7 +27,7 @@ def train_and_evaluate():
 
     # ── 1. 数据准备 ────────────────────────────────────────────────
     print("\n【Step 1】加载数据...")
-    USE_MYSQL = os.getenv("USE_MYSQL", "false").lower() == "true"
+    USE_MYSQL = os.getenv("USE_MYSQL", "true").lower() == "true"
 
     if USE_MYSQL:
         from db.mysql_loader import MySQLLoader
